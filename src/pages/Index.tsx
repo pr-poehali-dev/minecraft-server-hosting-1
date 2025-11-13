@@ -1,54 +1,75 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Toaster } from '@/components/ui/toaster';
 import Icon from '@/components/ui/icon';
+import AuthDialog from '@/components/AuthDialog';
+
+const PLANS_URL = 'https://functions.poehali.dev/2fb9cc65-172d-4f1b-8afb-2d8771993279';
+
+interface Plan {
+  id: number;
+  name: string;
+  slug: string;
+  price: string;
+  max_players: number;
+  ram_gb: number;
+  cpu_cores: number;
+  storage_gb: number;
+  has_ddos_protection: boolean;
+  support_level: string;
+  features: string[];
+  is_popular: boolean;
+  is_active: boolean;
+}
+
+interface User {
+  id: number;
+  email: string;
+  full_name: string;
+}
 
 export default function Index() {
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [plansLoading, setPlansLoading] = useState(true);
 
-  const plans = [
-    {
-      id: 'starter',
-      name: 'Starter',
-      price: '299₽',
-      period: '/мес',
-      players: 'До 10 игроков',
-      ram: '2 GB RAM',
-      cpu: '1 vCPU',
-      storage: '10 GB SSD',
-      ddos: true,
-      support: '24/7',
-      features: ['Автобэкапы', 'FTP доступ', 'Панель управления']
-    },
-    {
-      id: 'premium',
-      name: 'Premium',
-      price: '599₽',
-      period: '/мес',
-      players: 'До 30 игроков',
-      ram: '4 GB RAM',
-      cpu: '2 vCPU',
-      storage: '25 GB SSD',
-      ddos: true,
-      support: '24/7',
-      popular: true,
-      features: ['Автобэкапы', 'FTP доступ', 'Панель управления', 'Бесплатные плагины']
-    },
-    {
-      id: 'ultimate',
-      name: 'Ultimate',
-      price: '999₽',
-      period: '/мес',
-      players: 'До 60 игроков',
-      ram: '8 GB RAM',
-      cpu: '4 vCPU',
-      storage: '50 GB SSD',
-      ddos: true,
-      support: '24/7',
-      features: ['Автобэкапы', 'FTP доступ', 'Панель управления', 'Бесплатные плагины', 'Приоритетная поддержка']
+  useEffect(() => {
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) {
+      setUser(JSON.parse(savedUser));
     }
-  ];
+
+    fetchPlans();
+  }, []);
+
+  const fetchPlans = async () => {
+    try {
+      const response = await fetch(PLANS_URL);
+      const data = await response.json();
+      if (data.success) {
+        setPlans(data.plans);
+      }
+    } catch (error) {
+      console.error('Failed to fetch plans:', error);
+    } finally {
+      setPlansLoading(false);
+    }
+  };
+
+  const handleAuthSuccess = (userData: User) => {
+    setUser(userData);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('user');
+    setUser(null);
+  };
+
+
 
   const faqs = [
     {
@@ -85,7 +106,14 @@ export default function Index() {
             <a href="#support" className="text-foreground hover:text-primary transition-colors font-medium">Поддержка</a>
             <a href="#about" className="text-foreground hover:text-primary transition-colors font-medium">О нас</a>
           </div>
-          <Button>Войти</Button>
+          {user ? (
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-muted-foreground hidden md:block">{user.email}</span>
+              <Button variant="outline" onClick={handleLogout}>Выйти</Button>
+            </div>
+          ) : (
+            <Button onClick={() => setAuthOpen(true)}>Войти</Button>
+          )}
         </div>
       </nav>
 
@@ -161,15 +189,24 @@ export default function Index() {
           </div>
 
           <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-            {plans.map((plan) => (
+            {plansLoading ? (
+              <div className="col-span-3 text-center py-12">
+                <p className="text-muted-foreground">Загрузка тарифов...</p>
+              </div>
+            ) : plans.length === 0 ? (
+              <div className="col-span-3 text-center py-12">
+                <p className="text-muted-foreground">Нет доступных тарифов</p>
+              </div>
+            ) : (
+              plans.map((plan) => (
               <Card
                 key={plan.id}
                 className={`relative transition-all hover:scale-105 cursor-pointer ${
-                  plan.popular ? 'border-primary border-2 shadow-lg' : 'border-2'
-                } ${selectedPlan === plan.id ? 'ring-2 ring-primary' : ''}`}
-                onClick={() => setSelectedPlan(plan.id)}
+                  plan.is_popular ? 'border-primary border-2 shadow-lg' : 'border-2'
+                } ${selectedPlan === plan.slug ? 'ring-2 ring-primary' : ''}`}
+                onClick={() => setSelectedPlan(plan.slug)}
               >
-                {plan.popular && (
+                {plan.is_popular && (
                   <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-primary text-white px-4 py-1 rounded-full text-sm font-montserrat font-semibold">
                     Популярный
                   </div>
@@ -177,28 +214,28 @@ export default function Index() {
                 <CardHeader className="text-center pb-8">
                   <CardTitle className="font-montserrat text-2xl mb-2">{plan.name}</CardTitle>
                   <div className="mb-4">
-                    <span className="font-montserrat font-bold text-4xl text-primary">{plan.price}</span>
-                    <span className="text-muted-foreground">{plan.period}</span>
+                    <span className="font-montserrat font-bold text-4xl text-primary">{plan.price}₽</span>
+                    <span className="text-muted-foreground">/мес</span>
                   </div>
                   <CardDescription className="text-lg font-semibold text-foreground">
-                    {plan.players}
+                    До {plan.max_players} игроков
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <Icon name="Check" className="text-primary" size={20} />
-                      <span>{plan.ram}</span>
+                      <span>{plan.ram_gb} GB RAM</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Icon name="Check" className="text-primary" size={20} />
-                      <span>{plan.cpu}</span>
+                      <span>{plan.cpu_cores} vCPU</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Icon name="Check" className="text-primary" size={20} />
-                      <span>{plan.storage}</span>
+                      <span>{plan.storage_gb} GB SSD</span>
                     </div>
-                    {plan.ddos && (
+                    {plan.has_ddos_protection && (
                       <div className="flex items-center gap-2">
                         <Icon name="Shield" className="text-primary" size={20} />
                         <span className="font-semibold">DDoS защита</span>
@@ -206,21 +243,22 @@ export default function Index() {
                     )}
                     <div className="flex items-center gap-2">
                       <Icon name="Clock" className="text-primary" size={20} />
-                      <span>Поддержка {plan.support}</span>
+                      <span>Поддержка {plan.support_level}</span>
                     </div>
-                    {plan.features.map((feature, idx) => (
+                    {plan.features && plan.features.map((feature, idx) => (
                       <div key={idx} className="flex items-center gap-2">
                         <Icon name="Check" className="text-primary" size={20} />
                         <span>{feature}</span>
                       </div>
                     ))}
                   </div>
-                  <Button className="w-full mt-6" variant={plan.popular ? 'default' : 'outline'}>
+                  <Button className="w-full mt-6" variant={plan.is_popular ? 'default' : 'outline'}>
                     Выбрать тариф
                   </Button>
                 </CardContent>
               </Card>
-            ))}
+            ))
+            )}
           </div>
         </div>
       </section>
@@ -351,6 +389,13 @@ export default function Index() {
           </div>
         </div>
       </footer>
+
+      <AuthDialog 
+        open={authOpen} 
+        onOpenChange={setAuthOpen} 
+        onAuthSuccess={handleAuthSuccess}
+      />
+      <Toaster />
     </div>
   );
 }
